@@ -17,7 +17,7 @@ const DEFAULT_POST_INTERVAL = '60000';
 // url_to_pathname('http://example.com/app/path/TO/?q=1', 'http://example.com/app') => '/path/to/index.html', lowercase, ends with /index.html
 function url_to_pathname(theUrl, urlPrefix) {
 	if (!theUrl.toLowerCase().startsWith(urlPrefix.toLowerCase())) {
-		throw { error: 'invalid_url', message: 'bad url prefix.' };
+		throw { error: 'INVALID_URL', message: 'bad url prefix.' };
 	}
 	const s = theUrl.substring(urlPrefix.length);
 	// only extract pathname:
@@ -58,7 +58,7 @@ async function sql_execute(env, sql, ...args) {
 	console.log(`[sql-execute] ${sql}, args=${args}`);
 	const { success } = await env.DB.prepare(sql).bind(...args).run();
 	if (!success) {
-		throw { error: 'internal_error', message: 'execute sql failed' };
+		throw { error: 'SQL_FAILED', message: 'execute sql failed' };
 	}
 }
 
@@ -98,7 +98,7 @@ async function validate_page(env, pageId, pageUrl, pathname, now) {
 		console.log(`check if page url accessible: ${pageUrl}`);
 		let resp = await fetch(pageUrl);
 		if (resp.status !== 200) {
-			throw { error: 'invalid_url', message: 'Cannot access page.' };
+			throw { error: 'INVALID_URL', message: 'Cannot access page.' };
 		}
 		// page url ok:
 		if (page === null) {
@@ -223,7 +223,7 @@ function get_oauth_redirect(provider, state, clientId, redirectUri) {
 		case 'weibo':
 			return `https://api.weibo.com/oauth2/authorize?response_type=code&client_id=${clientId}&state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 		default:
-			throw { error: 'invalid_oauth_provider', message: `unsupported oauth provider: ${provider}` };
+			throw { error: 'INVALID_OAUTH_PROVIDER', data: provider, message: `unsupported oauth provider.` };
 	}
 }
 
@@ -379,7 +379,7 @@ async function get_comments(request, url, env) {
 	const pageUrl = url.searchParams.get('url') || '';
 	console.log(pageUrl);
 	if (!pageUrl) {
-		throw { error: 'invalid_parameter', message: 'Missing url' };
+		throw { error: 'INVALID_PARAMETER', message: 'Missing url' };
 	}
 	const pathname = url_to_pathname(pageUrl, env.PAGE_ORIGIN + (env.PAGE_PATH_PREFIX || ''));
 	const pageId = hash(pathname);
@@ -393,6 +393,7 @@ async function get_comments(request, url, env) {
 			await env.KV.put(pageId, result);
 		}
 	}
+	// NOTE result is a json string:
 	return new Response(result, {
 		headers: {
 			'Content-Type': 'application/json'
@@ -403,15 +404,15 @@ async function get_comments(request, url, env) {
 async function check_user(request, env, now, checkRateLimit = true) {
 	const user = get_user_from_cookie(request, env);
 	if (user === null) {
-		throw { error: 'signin_required', message: 'Please signin first.' };
+		throw { error: 'SIGNIN_REQUIRED', message: 'Please signin first.' };
 	}
 	// check if user is locked: 
 	const db_user = await sql_query_first(env, 'SELECT * FROM users WHERE id=?', user.id);
 	if (db_user.locked_at > now) {
-		throw { error: 'user_locked', message: 'User is locked.' };
+		throw { error: 'USER_LOCKED', message: 'User is locked.' };
 	}
 	if (checkRateLimit && db_user.role === ROLE_USER && ((now - db_user.updated_at) < (parseInt(env.POST_INTERVAL || DEFAULT_POST_INTERVAL)))) {
-		throw { error: 'rate_limit', message: 'Please wait a little while.' };
+		throw { error: 'RATE_LIMIT', message: 'Please wait a little while.' };
 	}
 	return db_user;
 }
@@ -424,16 +425,16 @@ async function post_reply(request, env) {
 	// check commentId:
 	const commentId = body.commentId || '';
 	if (!commentId) {
-		throw { error: 'invalid_parameter', message: 'Missing commentId.' };
+		throw { error: 'INVALID_PARAMETER', data: 'commentId', message: 'Missing commentId.' };
 	}
 	const content = (body.content || '').trim();
 	if (!content) {
-		throw { error: 'invalid_parameter', message: 'Missing content.' };
+		throw { error: 'INVALID_PARAMETER', date: 'content', message: 'Missing content.' };
 	}
 	// reply:
 	const comment = await sql_query_first(env, 'SELECT id, page_id, replies_count FROM comments WHERE id=?', commentId);
 	if (!comment) {
-		throw { error: 'invalid_parameter', message: 'Invalid commentId.' };
+		throw { error: 'INVALID_PARAMETER', data: 'commentId', message: 'Invalid commentId.' };
 	}
 	const reply = await insert_reply(env, user, commentId, content, now);
 	if (comment.replies_count <= 20) {
@@ -449,14 +450,14 @@ async function delete_reply(request, env) {
 	const body = await request.json();
 	const replyId = body.replyId || '';
 	if (!replyId) {
-		throw { error: 'invalid_parameter', message: 'Missing replyId.' };
+		throw { error: 'INVALID_PARAMETER', data: 'replyId', message: 'Missing replyId.' };
 	}
 	const reply = await sql_query_first(env, 'SELECT * FROM replies WHERE id = ?', replyId);
 	if (reply === null) {
-		throw { error: 'invalid_parameter', message: 'Reply not exist.' };
+		throw { error: 'INVALID_PARAMETER', data: 'replyId', message: 'Reply not exist.' };
 	}
 	if (user.role !== ROLE_ADMIN && user.id !== reply.user_id) {
-		throw { error: 'permission_denied', message: 'Cannot delete reply.' };
+		throw { error: 'PERMISSION_DENIED', message: 'Cannot delete reply.' };
 	}
 	const comment = await sql_query_first(env, 'SELECT page_id FROM comments WHERE id = ?', reply.comment_id);
 	// delete reply:
@@ -477,11 +478,11 @@ async function post_comment(request, env) {
 	// check pageUrl or commentId:
 	const pageUrl = body.pageUrl || '';
 	if (!pageUrl) {
-		throw { error: 'invalid_parameter', message: 'Missing pageUrl.' };
+		throw { error: 'INVALID_PARAMETER', data: 'pageUrl', message: 'Missing pageUrl.' };
 	}
 	const content = (body.content || '').trim();
 	if (!content) {
-		throw { error: 'invalid_parameter', message: 'Missing content.' };
+		throw { error: 'INVALID_PARAMETER', data: 'content', message: 'Missing content.' };
 	}
 	// normalize page url:
 	const pathname = url_to_pathname(pageUrl, env.PAGE_ORIGIN + (env.PAGE_PATH_PREFIX || ''));
@@ -499,14 +500,14 @@ async function delete_comment(request, env) {
 	const body = await request.json();
 	const commentId = body.commentId || '';
 	if (!commentId) {
-		throw { error: 'invalid_parameter', message: 'Missing commentId.' };
+		throw { error: 'INVALID_PARAMETER', data: 'commentId', message: 'Missing commentId.' };
 	}
 	const comment = await sql_query_first(env, 'SELECT * FROM comments WHERE id = ?', commentId);
 	if (comment === null) {
-		throw { error: 'invalid_parameter', message: 'Comment not exist.' };
+		throw { error: 'INVALID_PARAMETER', data: 'commentId', message: 'Comment not exist.' };
 	}
 	if (user.role !== ROLE_ADMIN && user.id !== comment.user_id) {
-		throw { error: 'permission_denied', message: 'Cannot delete comment.' };
+		throw { error: 'PERMISSION_DENIED', message: 'Cannot delete comment.' };
 	}
 	// delete comment / replies:
 	await sql_execute(env, 'DELETE FROM comments WHERE id = ?', comment.id);
@@ -535,6 +536,13 @@ function add_cors(response, env) {
 	response.headers.set("Vary", "Origin");
 }
 
+function translate_error(err, env) {
+	if (err.error) {
+		err.message = env['I18N_' + err.error] || err.message;
+	}
+	return err;
+}
+
 export default {
 	async fetch(request, env, ctx) {
 		let url = new URL(request.url);
@@ -561,7 +569,7 @@ export default {
 					}
 				} catch (err) {
 					console.error(err);
-					response = Response.json(err, {
+					response = Response.json(translate_error(err, env), {
 						status: 400
 					});
 				}
@@ -585,7 +593,7 @@ export default {
 					}
 				} catch (err) {
 					console.error(err);
-					response = Response.json(err, {
+					response = Response.json(translate_error(err, env), {
 						status: 400
 					});
 				}
