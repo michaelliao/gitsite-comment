@@ -302,6 +302,7 @@ async function oauth_response(request, env) {
 			role: ROLE_USER,
 			name: user.name,
 			image: user.image,
+			salt: 'not-used',
 			locked_at: 0,
 			updated_at: 0
 		};

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     role INTEGER NOT NULL,
     name TEXT NOT NULL,
     image TEXT NOT NULL,
+    salt TEXT NOT NULL,
     locked_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
