@@ -1,92 +1,29 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "liaoxuefeng-comment"
+name = "gitsite-comment"
 main = "src/index.js"
 compatibility_date = "2024-05-29"
 compatibility_flags = ["nodejs_compat"]
 
-# Automatically place your workloads in an optimal location to minimize latency.
-# If you are running back-end logic in a Worker, running it closer to your back-end infrastructure
-# rather than the end user may result in better performance.
-# Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-# [placement]
-# mode = "smart"
+# command "npx wrangler dev" will load vars from file `.dev.vars`:
+vars = { ENVIRONMENT = "dev" }
 
-# Variable bindings. These are arbitrary, plaintext strings (similar to environment variables)
-# Docs:
-# - https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-# Note: Use secrets to store sensitive data.
-# - https://developers.cloudflare.com/workers/configuration/secrets/
-[vars]
-OAUTH_PROVIDER = "oauth-provider-name"
-OAUTH_CLIENT_ID = "your-oauth-client-id"
-OAUTH_CLIENT_SECRET = "your-oauth-client-secret"
-OAUTH_REDIRECT_URI = "https://oauth-response-server/oauth_response"
-SALT = "any-random-string"
-PAGE_ORIGIN = "https://git-site-server"
-PAGE_PATH_PREFIX = ""
-I18N_RATE_LIMIT = "Please wait a few minutes!"
+d1_databases = [
+    { binding = "DB", database_name = "comment-db", database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" },
+]
 
-# Bind the Workers AI model catalog. Run machine learning models, powered by serverless GPUs, on Cloudflare’s global network
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#workers-ai
-# [ai]
-# binding = "AI"
+kv_namespaces = [{ binding = "KV", id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }]
 
-# Bind an Analytics Engine dataset. Use Analytics Engine to write analytics within your Pages Function.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#analytics-engine-datasets
-# [[analytics_engine_datasets]]
-# binding = "MY_DATASET"
+#################### production configuration ####################
 
-# Bind a headless browser instance running on Cloudflare's global network.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#browser-rendering
-# [browser]
-# binding = "MY_BROWSER"
+[env.production]
 
-# Bind a D1 database. D1 is Cloudflare’s native serverless SQL database.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#d1-databases
-[[d1_databases]]
-binding = "DB"
-database_name = "comment-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+name = "liaoxuefeng-comment"
 
-# Bind a dispatch namespace. Use Workers for Platforms to deploy serverless functions programmatically on behalf of your customers.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#dispatch-namespace-bindings-workers-for-platforms
-# [[dispatch_namespaces]]
-# binding = "MY_DISPATCHER"
-# namespace = "my-namespace"
+# command "npx wrangler deploy --env production" will load secrets from file `.production.vars`:
+vars = { ENVIRONMENT = "production", OAUTH_PRIVIDER = "qq", OAUTH_CLIENT_ID = "100323679", OAUTH_REDIRECT_URI = "https://api.liaoxuefeng.com/oauth_response", PAGE_ORIGIN = "https://liaoxuefeng.com", I18N_RATE_LIMIT = "你打字太快了，歇一会吧！", I18N_USER_LOCKED = "用户被限制登录！", I18N_SIGNIN_REQUIRED = "登录已失效，请重新登录！" }
 
-# Bind a Durable Object. Durable objects are a scale-to-zero compute primitive based on the actor model.
-# Durable Objects can live for as long as needed. Use these when you need a long-running "server", such as in realtime apps.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#durable-objects
-# [[durable_objects.bindings]]
-# name = "MY_DURABLE_OBJECT"
-# class_name = "MyDurableObject"
+d1_databases = [
+    { binding = "DB", database_name = "comment-db", database_id = "3807fb92-ef4d-42b9-8eec-1827065a04dd" },
+]
 
-# Durable Object migrations.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#migrations
-# [[migrations]]
-# tag = "v1"
-# new_classes = ["MyDurableObject"]
-
-# Bind a Hyperdrive configuration. Use to accelerate access to your existing databases from Cloudflare Workers.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#hyperdrive
-# [[hyperdrive]]
-# binding = "MY_HYPERDRIVE"
-# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-# Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#kv-namespaces
-[[kv_namespaces]]
-binding = "KV"
-id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-# Bind an R2 Bucket. Use R2 to store arbitrarily large blobs of data, such as files.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#r2-buckets
-# [[r2_buckets]]
-# binding = "MY_BUCKET"
-# bucket_name = "my-bucket"
-
-# Bind a Vectorize index. Use to store and query vector embeddings for semantic search, classification and other vector search use-cases.
-# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#vectorize-indexes
-# [[vectorize]]
-# binding = "MY_INDEX"
-# index_name = "my-index"
+kv_namespaces = [{ binding = "KV", id = "359c0051a3d548d798b7b73a552b2cec" }]

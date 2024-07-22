@@ -36,11 +36,16 @@ function hash(str) {
 	return sha1.digest('hex').substring(0, 32);
 }
 
-// nextId(millis) => 32-bytes uuid starts with time (can be used as increment uuid)
+// 16-bytes random string:
+function randomStr() {
+	return randomUUID().substring(19).replace(/-/g, '');
+}
+
+// nextId(millis) => 24-bytes uuid starts with time (can be used as increment uuid)
 function nextId(ts) {
-	// 11 chars until 2300-01-01 => '978a4a80400'
+	// 11 chars until 2500-01-01 => 'f3625217400'
 	const sts = ts.toString(16);
-	return sts + randomUUID().substring(12).replace(/-/g, '');
+	return sts + randomUUID().substring(22).replace(/-/g, '');
 }
 
 async function sql_query_first(env, sql, ...args) {
@@ -79,12 +84,20 @@ async function sql_update(env, table, obj, ...keys) {
 }
 
 async function load_comments(env, pageId, limit = 20) {
-	let comments = await sql_query_all(env, 'SELECT * FROM comments WHERE page_id = ? ORDER BY updated_at DESC LIMIT ?', pageId, limit);
-	for (let comment of comments) {
-		if (comment.replies_count === 0) {
-			comment.replies = [];
-		} else {
-			comment.replies = await sql_query_all(env, 'SELECT * FROM replies WHERE comment_id = ? ORDER BY id LIMIT ?', comment.id, limit);
+	let comments;
+	if (pageId) {
+		comments = await sql_query_all(env, 'SELECT * FROM comments WHERE page_id = ? ORDER BY updated_at DESC LIMIT ?', pageId, limit);
+		for (let comment of comments) {
+			if (comment.replies_count === 0) {
+				comment.replies = [];
+			} else {
+				comment.replies = await sql_query_all(env, 'SELECT * FROM replies WHERE comment_id = ? ORDER BY id LIMIT ?', comment.id, limit);
+			}
+		}
+	} else {
+		comments = await sql_query_all(env, 'SELECT * FROM comments ORDER BY updated_at DESC LIMIT ?', limit);
+		for (let comment of comments) {
+			comment.page = await sql_query_first(env, 'SELECT * FROM pages WHERE id = ?', comment.page_id);
 		}
 	}
 	return comments;
@@ -195,23 +208,23 @@ function create_user_token(user, expires, salt) {
 	return encodeURIComponent(payload + '\n' + hash)
 }
 
-function parse_user_from_token(str, salt) {
+async function parse_user_from_token(env, str) {
 	const [id, role, name, image, expires, hash] = decodeURIComponent(str).split('\n');
 	if (parseInt(expires) < Date.now()) {
 		return null;
 	}
+	// fetch user salt:
+	const db_user = await sql_query_first(env, 'SELECT * FROM users WHERE id = ?', id);
+	if (db_user === null) {
+		return null;
+	}
 	const payload = id + '\n' + role + '\n' + name + '\n' + image + '\n' + expires;
-	const hmac = createHmac('sha1', salt);
+	const hmac = createHmac('sha1', db_user.salt);
 	hmac.update(payload);
 	if (hash !== hmac.digest('hex').substring(0, 10)) {
 		return null;
 	}
-	return {
-		id: id,
-		role: role,
-		name: name,
-		image: image
-	};
+	return db_user;
 }
 
 function get_oauth_redirect(provider, state, clientId, redirectUri) {
@@ -237,6 +250,7 @@ function oauth_request(env) {
 }
 
 async function oauth_response(request, env) {
+	const now = Date.now();
 	const salt = env.SALT;
 	const provider = env.OAUTH_PROVIDER;
 	const clientId = env.OAUTH_CLIENT_ID;
@@ -302,7 +316,7 @@ async function oauth_response(request, env) {
 			role: ROLE_USER,
 			name: user.name,
 			image: user.image,
-			salt: 'not-used',
+			salt: randomStr(),
 			locked_at: 0,
 			updated_at: 0
 		};
@@ -312,11 +326,14 @@ async function oauth_response(request, env) {
 			return oauth_response_failed('User is locked.');
 		}
 		// update:
-		await sql_update(env, 'users', user, 'name', 'image');
+		db_user.name = user.name;
+		db_user.image = user.image;
+		db_user.salt = randomStr();
+		await sql_update(env, 'users', db_user, 'name', 'image', 'salt');
 	}
 	user.role = db_user.role;
-	const expires = Date.now() + 31536000_000;
-	const token = create_user_token(user, expires, salt);
+	const expires = now + 31536000_000;
+	const token = create_user_token(user, expires, db_user.salt);
 	const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -366,12 +383,12 @@ function create_html_response(html) {
 	});
 }
 
-// user from cookie, or null if parse failed:
-function get_user_from_cookie(request, env) {
+// user from auth header, or null if parse failed:
+async function get_user_from_auth_header(request, env) {
 	const auth = request.headers.get('Authorization');
 	if (auth && auth.startsWith('Bearer: ')) {
 		const token = auth.substring(8).trim();
-		return parse_user_from_token(token, env.SALT);
+		return await parse_user_from_token(env, token);
 	}
 	return null;
 }
@@ -379,19 +396,27 @@ function get_user_from_cookie(request, env) {
 async function get_comments(request, url, env) {
 	const pageUrl = url.searchParams.get('url') || '';
 	console.log(pageUrl);
+	let result;
 	if (!pageUrl) {
-		throw { error: 'INVALID_PARAMETER', message: 'Missing url' };
-	}
-	const pathname = url_to_pathname(pageUrl, env.PAGE_ORIGIN + (env.PAGE_PATH_PREFIX || ''));
-	const pageId = hash(pathname);
-	let result = await env.KV.get(pageId);
-	if (!result) {
-		const comments = await load_comments(env, pageId);
+		// no page url, return recent comments:
+		const size = parseInt(url.searchParams.get('size') || 20);
+		const comments = await load_comments(env, '', size);
 		result = JSON.stringify({
 			comments: comments
 		});
-		if (comments.length > 0) {
-			await env.KV.put(pageId, result);
+	} else {
+		// by page url:
+		const pathname = url_to_pathname(pageUrl, env.PAGE_ORIGIN + (env.PAGE_PATH_PREFIX || ''));
+		const pageId = hash(pathname);
+		result = await env.KV.get(pageId);
+		if (!result) {
+			const comments = await load_comments(env, pageId);
+			result = JSON.stringify({
+				comments: comments
+			});
+			if (comments.length > 0) {
+				await env.KV.put(pageId, result);
+			}
 		}
 	}
 	// NOTE result is a json string:
@@ -403,12 +428,10 @@ async function get_comments(request, url, env) {
 }
 
 async function check_user(request, env, now, checkRateLimit = true) {
-	const user = get_user_from_cookie(request, env);
-	if (user === null) {
+	const db_user = await get_user_from_auth_header(request, env);
+	if (db_user === null) {
 		throw { error: 'SIGNIN_REQUIRED', message: 'Please signin first.' };
 	}
-	// check if user is locked: 
-	const db_user = await sql_query_first(env, 'SELECT * FROM users WHERE id=?', user.id);
 	if (db_user.locked_at > now) {
 		throw { error: 'USER_LOCKED', message: 'User is locked.' };
 	}
@@ -484,6 +507,9 @@ async function post_comment(request, env) {
 	const content = (body.content || '').trim();
 	if (!content) {
 		throw { error: 'INVALID_PARAMETER', data: 'content', message: 'Missing content.' };
+	}
+	if (content.length > 20000) {
+		throw { error: 'INVALID_PARAMETER', data: 'content', message: 'Content too long.' };
 	}
 	// normalize page url:
 	const pathname = url_to_pathname(pageUrl, env.PAGE_ORIGIN + (env.PAGE_PATH_PREFIX || ''));
