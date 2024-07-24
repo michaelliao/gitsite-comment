@@ -574,6 +574,10 @@ export default {
 	async fetch(request, env, ctx) {
 		let url = new URL(request.url);
 		console.log(`${new Date()} ${request.method}: ${url} `);
+		if (url.protocol === 'http:' && env.ALWAYS_HTTPS === 'true') {
+			url.protocol = 'https:';
+			return Response.redirect(url.toString, 301);
+		}
 		let response = null;
 		switch (url.pathname) {
 			case '/api/comments':

@@ -5,7 +5,7 @@ compatibility_date = "2024-05-29"
 compatibility_flags = ["nodejs_compat"]
 
 # command "npx wrangler dev" will load vars from file `.dev.vars`:
-vars = { ENVIRONMENT = "dev" }
+vars = { ENVIRONMENT = "dev", ALWAYS_HTTPS = "false" }
 
 d1_databases = [
     { binding = "DB", database_name = "comment-db", database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" },
@@ -20,7 +20,7 @@ kv_namespaces = [{ binding = "KV", id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }]
 name = "liaoxuefeng-comment"
 
 # command "npx wrangler deploy --env production" will load secrets from file `.production.vars`:
-vars = { ENVIRONMENT = "production", OAUTH_PROVIDER = "qq", OAUTH_CLIENT_ID = "100323679", OAUTH_REDIRECT_URI = "https://api.liaoxuefeng.com/oauth_response", PAGE_ORIGIN = "https://liaoxuefeng.com", I18N_RATE_LIMIT = "你打字太快了，歇一会吧！", I18N_USER_LOCKED = "用户被限制登录！", I18N_SIGNIN_REQUIRED = "登录已失效，请重新登录！" }
+vars = { ENVIRONMENT = "production", ALWAYS_HTTPS = "true", OAUTH_PROVIDER = "qq", OAUTH_CLIENT_ID = "100323679", OAUTH_REDIRECT_URI = "https://api.liaoxuefeng.com/oauth_response", PAGE_ORIGIN = "https://liaoxuefeng.com", I18N_RATE_LIMIT = "你打字太快了，歇一会吧！", I18N_USER_LOCKED = "用户被限制登录！", I18N_SIGNIN_REQUIRED = "登录已失效，请重新登录！" }
 
 d1_databases = [
     { binding = "DB", database_name = "comment-db", database_id = "3807fb92-ef4d-42b9-8eec-1827065a04dd" },
